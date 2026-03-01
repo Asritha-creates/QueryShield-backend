@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+.env.development
+.env.production
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# logs
+logs/
+*.log
+npm-debug.log*
