@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
+const MongoStore = require("connect-mongo");
 //const { MongoClient, UUID } = require("mongodb");
 //const { getClient } = require('./mongoConnection');
 const { parseSchema } = require('mongodb-schema');
@@ -16,28 +18,42 @@ const {buildCollectionIndex,getRelevantCollections}=require('./ai/retrieval/coll
 //const regex = require('regex');
 const buildInsightPrompt = require('./ai/insightPrompt');
 const app = express();
+app.set('trust proxy', 1); // trust first proxy if behind one (e.g. in production)
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: [process.env.FRONTEND_URL, "http://localhost:3000"],
     credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
-    key: 'session_cookie_name', 
-    secret: process.env.secret || 'default_secret_key', 
-    
+    name: "queryshield.sid",
+    secret: process.env.SESSION_SECRET,
+
     resave: false,
     saveUninitialized: false,
-    
+
+    store: MongoStore.create({
+        mongoUrl: process.env.MONGO_URI,
+        collectionName: "sessions",
+        ttl: 60 * 60 * 24 * 7
+    }),
+
     cookie: {
-        maxAge: 60 * 60 * 1000, 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === 'production' 
+        httpOnly: true,
+        secure: true,        
+        sameSite: "none",      
+        maxAge: 1000 * 60 * 60 * 24 * 7
     }
 }));
+app.use((req, res, next) => {
+    if (req.session) {
+        req.session.touch(); // refresh expiry on activity
+    }
+    next();
+});
 
-require('dotenv').config();
+
 
 
 async function getCollectionSamples(db, schema){
@@ -317,7 +333,7 @@ app.post("/logout", async (req, res) => {
     }
 
     req.session.destroy(() => {
-        res.clearCookie("session_cookie_name");
+        res.clearCookie("queryshield.sid");
         res.json({ message: "Logged out successfully" });
     });
 });
